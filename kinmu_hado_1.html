@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>勤務実績表 - 波戸</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Hiragino Sans', 'Noto Sans JP', 'Meiryo', sans-serif; background: #f4f5f7; min-height: 100vh; }
+
+  .header { background: #fff; padding: 16px 16px 0; border-bottom: 1px solid #e8e9eb; position: sticky; top: 0; z-index: 100; }
+  .header-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+  .header h1 { font-size: 18px; font-weight: 600; color: #1a1a2e; }
+  .header p { font-size: 12px; color: #888; }
+
+  .month-tabs { display: flex; gap: 4px; }
+  .month-tab { flex: 1; padding: 10px 4px; text-align: center; border-bottom: 3px solid transparent; font-size: 14px; font-weight: 500; color: #888; cursor: pointer; transition: all 0.15s; background: none; border-top: none; border-left: none; border-right: none; }
+  .month-tab.active { color: #185FA5; border-bottom-color: #185FA5; }
+
+  .summary { display: flex; gap: 8px; padding: 10px 16px; background: #fff; border-bottom: 1px solid #e8e9eb; }
+  .summary-item { flex: 1; text-align: center; background: #f8f9fb; border-radius: 10px; padding: 8px 4px; }
+  .summary-label { font-size: 11px; color: #999; }
+  .summary-val { font-size: 17px; font-weight: 600; color: #1a1a2e; margin-top: 2px; }
+
+  .day-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; padding-bottom: 40px; }
+  .day-card { background: #fff; border-radius: 14px; border: 1px solid #e8e9eb; overflow: hidden; }
+  .day-card.sat { border-left: 4px solid #5b9bd5; }
+  .day-card.sun { border-left: 4px solid #d45b5b; }
+  .day-card.has-entry { border-color: #c5d8ef; }
+
+  .day-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; user-select: none; min-height: 52px; }
+  .day-left { display: flex; align-items: center; gap: 10px; }
+  .day-num { font-size: 22px; font-weight: 600; color: #1a1a2e; min-width: 36px; }
+  .day-num.today-num { color: #185FA5; }
+  .today-badge { font-size: 10px; background: #185FA5; color: #fff; padding: 2px 6px; border-radius: 10px; font-weight: 600; }
+  .day-name { font-size: 13px; font-weight: 500; }
+  .day-name.sat { color: #185FA5; }
+  .day-name.sun { color: #c0392b; }
+  .day-name.week { color: #888; }
+  .day-right { display: flex; align-items: center; gap: 8px; }
+  .work-hours { font-size: 13px; font-weight: 600; color: #0a7c5e; background: #e8f7f2; padding: 4px 10px; border-radius: 20px; }
+  .work-hours.empty { color: #bbb; background: none; font-weight: 400; font-size: 12px; }
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #ddd; flex-shrink: 0; transition: background 0.3s; }
+  .sync-dot.synced { background: #27ae60; }
+  .sync-dot.syncing { background: #f39c12; animation: blink 1s infinite; }
+  .sync-dot.error { background: #e74c3c; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .chevron { font-size: 11px; color: #ccc; transition: transform 0.2s; }
+  .chevron.open { transform: rotate(180deg); }
+
+  .day-body { padding: 4px 14px 14px; border-top: 1px solid #f0f0f0; }
+  .time-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; color: #999; font-weight: 500; padding-left: 2px; }
+  .field input[type="time"] { width: 100%; padding: 10px 6px; border: 1.5px solid #e0e0e0; border-radius: 10px; font-size: 15px; text-align: center; background: #fafafa; color: #1a1a2e; outline: none; -webkit-appearance: none; }
+  .field input[type="time"]:focus { border-color: #185FA5; background: #fff; }
+  .field textarea { width: 100%; padding: 10px 12px; border: 1.5px solid #e0e0e0; border-radius: 10px; font-size: 14px; background: #fafafa; color: #1a1a2e; outline: none; resize: none; font-family: inherit; line-height: 1.5; }
+  .field textarea:focus { border-color: #185FA5; background: #fff; }
+  .calc-row { text-align: right; font-size: 12px; color: #888; margin-top: 4px; }
+  .calc-row span { color: #0a7c5e; font-weight: 600; font-size: 13px; }
+
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 999; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+  .toast.ok { background: #1a3a2e; color: #fff; }
+  .toast.err { background: #c0392b; color: #fff; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-top">
+    <h1>勤務実績表</h1>
+    <p>ZAZOU株式会社 ｜ 波戸</p>
+  </div>
+  <div class="month-tabs" id="monthTabs"></div>
+</div>
+<div class="summary" id="summary"></div>
+<div class="day-list" id="dayList"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbw-q2ybTdtKBnxQHKLFqkpmv--uCRMVTIa4ilTjgqdxaRgZTO7CGk109qHtPl4QWgL5xw/exec';
+const MONTHS = [
+  { label: '2月', year: 2026, month: 2 },
+  { label: '3月', year: 2026, month: 3 },
+  { label: '4月', year: 2026, month: 4 },
+];
+const DOW = ['日','月','火','水','木','金','土'];
+let currentMonth = 4;
+let openDays = new Set();
+let syncStatus = {};
+let syncTimers = {};
+
+function sKey(y, m) { return `kinmu_${y}_${m}`; }
+function load(y, m) { try { const r = localStorage.getItem(sKey(y,m)); return r ? JSON.parse(r) : {}; } catch(e) { return {}; } }
+function save(y, m, d) { try { localStorage.setItem(sKey(y,m), JSON.stringify(d)); } catch(e) {} }
+function daysIn(y, m) { return new Date(y, m, 0).getDate(); }
+function dk(y, m, d) { return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function toMin(s) { if(!s) return 0; const [h,m]=s.split(':').map(Number); return(isNaN(h)||isNaN(m))?0:h*60+m; }
+function fmtH(mins) { if(mins<=0) return ''; const h=Math.floor(mins/60),m=mins%60; return m?`${h}時間${m}分`:`${h}時間`; }
+function calc(e) { if(!e||!e.start||!e.end) return 0; return Math.max(0, toMin(e.end)-toMin(e.start)-(toMin(e.rest)||0)); }
+
+let toastTimer;
+function toast(msg, type='ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+function setDot(id, status) {
+  syncStatus[id] = status;
+  const el = document.querySelector(`#c_${id} .sync-dot`);
+  if (el) el.className = `sync-dot ${status}`;
+}
+
+async function syncSheet(payload, id) {
+  setDot(id, 'syncing');
+  try {
+    await fetch(GAS_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    setDot(id, 'synced');
+    toast('✓ スプレッドシートに保存しました');
+  } catch(e) {
+    setDot(id, 'error');
+    toast('⚠ オフライン — ローカルに保存済み', 'err');
+  }
+}
+
+function renderTabs() {
+  document.getElementById('monthTabs').innerHTML = MONTHS.map(m =>
+    `<button class="month-tab ${m.month===currentMonth?'active':''}" onclick="switchMonth(${m.month})">${m.label}</button>`
+  ).join('');
+}
+
+function renderSummary() {
+  const {year, month} = MONTHS.find(m=>m.month===currentMonth);
+  const data = load(year, month);
+  let mins=0, days=0;
+  for(let d=1; d<=daysIn(year,month); d++) { const w=calc(data[dk(year,month,d)]); if(w>0){mins+=w;days++;} }
+  const h=Math.floor(mins/60), m=mins%60;
+  document.getElementById('summary').innerHTML = `
+    <div class="summary-item"><div class="summary-label">出勤日数</div><div class="summary-val">${days}日</div></div>
+    <div class="summary-item"><div class="summary-label">総勤務時間</div><div class="summary-val">${mins?m?`${h}時間${m}分`:`${h}時間`:'0時間'}</div></div>
+  `;
+}
+
+function renderDays() {
+  const {year, month} = MONTHS.find(m=>m.month===currentMonth);
+  const data = load(year, month);
+  const today = new Date();
+  const isCur = today.getFullYear()===year && today.getMonth()+1===month;
+  const todayD = isCur ? today.getDate() : -1;
+  let html = '';
+  for(let d=1; d<=daysIn(year,month); d++) {
+    const id = dk(year, month, d);
+    const dow = new Date(year, month-1, d).getDay();
+    const entry = data[id] || {};
+    const wm = calc(entry);
+    const isOpen = openDays.has(id);
+    const isSat=dow===6, isSun=dow===0, isToday=d===todayD;
+    const cc = 'day-card'+(isSat?' sat':isSun?' sun':'')+(wm>0?' has-entry':'');
+    const dnc = isSat?'sat':isSun?'sun':'week';
+    const sc = syncStatus[id] || (wm>0?'synced':'');
+    const hoursHtml = wm>0 ? `<span class="work-hours">${fmtH(wm)}</span>`
+                    : entry.start ? `<span class="work-hours empty">入力中</span>` : '';
+    html += `<div class="${cc}" id="c_${id}">
+      <div class="day-header" onclick="toggle('${id}')">
+        <div class="day-left">
+          <span class="${isToday?'day-num today-num':'day-num'}">${d}</span>
+          ${isToday?'<span class="today-badge">今日</span>':''}
+          <span class="day-name ${dnc}">${DOW[dow]}</span>
+        </div>
+        <div class="day-right">
+          ${hoursHtml}
+          <span class="sync-dot ${sc}"></span>
+          <span class="chevron ${isOpen?'open':''}">▼</span>
+        </div>
+      </div>`;
+    if (isOpen) {
+      html += `<div class="day-body">
+        <div class="time-row">
+          <div class="field"><label>出勤</label><input type="time" value="${entry.start||''}" onchange="upd('${year}','${month}','${id}','start',this.value)"></div>
+          <div class="field"><label>退勤</label><input type="time" value="${entry.end||''}" onchange="upd('${year}','${month}','${id}','end',this.value)"></div>
+          <div class="field"><label>休憩</label><input type="time" value="${entry.rest||'00:15'}" onchange="upd('${year}','${month}','${id}','rest',this.value)"></div>
+        </div>
+        ${wm>0?`<div class="calc-row">勤務時間：<span>${fmtH(wm)}</span></div>`:''}
+        <div class="field" style="margin-top:10px"><label>業務内容</label>
+          <textarea rows="2" placeholder="例：接客、調理補助など..." onchange="upd('${year}','${month}','${id}','memo',this.value)">${entry.memo||''}</textarea>
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  document.getElementById('dayList').innerHTML = html;
+}
+
+function upd(year, month, id, field, val) {
+  const data = load(+year, +month);
+  if(!data[id]) data[id]={};
+  data[id][field] = val;
+  save(+year, +month, data);
+  renderSummary();
+  const wm = calc(data[id]);
+  const card = document.getElementById('c_'+id);
+  if(card) {
+    const hw = card.querySelector('.work-hours');
+    const cr = card.querySelector('.calc-row');
+    if(wm>0) {
+      if(hw){hw.textContent=fmtH(wm);hw.className='work-hours';}
+      if(cr) cr.innerHTML=`勤務時間：<span>${fmtH(wm)}</span>`;
+    }
+  }
+  clearTimeout(syncTimers[id]);
+  syncTimers[id] = setTimeout(()=>{
+    const e = (load(+year,+month)[id])||{};
+    syncSheet({ date:id, dow:DOW[new Date(+year,+month-1,+id.split('-')[2]).getDay()],
+      start:e.start||'', end:e.end||'', rest:e.rest||'',
+      workHours:fmtH(calc(e)), memo:e.memo||'' }, id);
+  }, 1500);
+}
+
+function toggle(id) {
+  openDays.has(id) ? openDays.delete(id) : (openDays.clear(), openDays.add(id));
+  renderDays();
+  if(openDays.has(id)) setTimeout(()=>{ const el=document.getElementById('c_'+id); if(el) el.scrollIntoView({behavior:'smooth',block:'nearest'}); },50);
+}
+
+function switchMonth(m) {
+  currentMonth=m; openDays.clear();
+  renderTabs(); renderSummary(); renderDays();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+renderTabs(); renderSummary(); renderDays();
+</script>
+</body>
+</html>
